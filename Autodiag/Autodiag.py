@@ -84,6 +84,7 @@ def runTest():
             AutoDiag_Test = False
             Upgrade_Test = False
             STB_Info_Test = False
+            Ethernet_Test = False
             WiFi_Test = False
             Front_Panel = False
             Equipment_Test = False
@@ -851,27 +852,7 @@ def runTest():
                             TEST_CREATION_API.write_log_to_file("AutoDiag Version: " + str(AutoDiag_Version))
                             TEST_CREATION_API.write_log_to_file("WiFi Firmware: " + str(WiFi_Firmware)) 
                             TEST_CREATION_API.write_log_to_file("\n")
-                            
-            ###############################################################################################################################################
-            ################################################################# Ethernet Test ###############################################################
-            ###############################################################################################################################################
-
-                            slot = NOS_API.slot_index(NOS_API.get_test_place_name())
-                            if NOS_API.Check_Eth_Port_UMA_UMA(slot, Eth_MAC):
-                                STB_Info_Test = True
-                            else:
-                                NOS_API.display_custom_dialog("Verifique cabo Ethernet", 1, ["Continuar"], NOS_API.WAIT_TIME_TO_CLOSE_DIALOG)
-                                time.sleep(5)
-                                if NOS_API.Check_Eth_Port_UMA_UMA(slot, Eth_MAC):
-                                    STB_Info_Test = True
-                                else:
-                                    TEST_CREATION_API.write_log_to_file("Ethernet Test Fails")
-                                    NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.ethernet_nok_error_code \
-                                                            + "; Error message: " + NOS_API.test_cases_results_info.ethernet_nok_error_message)
-                                    NOS_API.set_error_message("Eth")
-                                    error_codes = NOS_API.test_cases_results_info.ethernet_nok_error_code
-                                    error_messages = NOS_API.test_cases_results_info.ethernet_nok_error_message
-                                    test_result = "FAIL"    
+                            STB_Info_Test = True
                         else:
                             TEST_CREATION_API.write_log_to_file("CM MAC number(" + str(Eth_MAC) + ") and CM MAC number previuosly scanned(" + str(NOS_API.test_cases_results_info.mac_using_barcode) + ") is not the same")
                             NOS_API.update_test_slot_comment("Error code: " + NOS_API.test_cases_results_info.wrong_mac_error_code \
@@ -897,10 +878,31 @@ def runTest():
                     error_messages = NOS_API.test_cases_results_info.wrong_s_n_error_message
             
             ###############################################################################################################################################
+            ################################################################# Ethernet Test ###############################################################
+            ###############################################################################################################################################
+            if (STB_Info_Test):
+                slot = NOS_API.slot_index(NOS_API.get_test_place_name())
+                if NOS_API.Check_Eth_Port_UMA_UMA(slot, Eth_MAC):
+                    Ethernet_Test = True
+                else:
+                    NOS_API.display_custom_dialog("Verifique cabo Ethernet", 1, ["Continuar"], NOS_API.WAIT_TIME_TO_CLOSE_DIALOG)
+                    time.sleep(5)
+                    if NOS_API.Check_Eth_Port_UMA_UMA(slot, Eth_MAC):
+                        Ethernet_Test = True
+                    else:
+                        TEST_CREATION_API.write_log_to_file("Ethernet Test Fails")
+                        NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.ethernet_nok_error_code \
+                                                + "; Error message: " + NOS_API.test_cases_results_info.ethernet_nok_error_message)
+                        NOS_API.set_error_message("Eth")
+                        error_codes = NOS_API.test_cases_results_info.ethernet_nok_error_code
+                        error_messages = NOS_API.test_cases_results_info.ethernet_nok_error_message
+                        test_result = "FAIL" 
+
+            ###############################################################################################################################################
             ################################################################## WiFi Test ##################################################################
             ###############################################################################################################################################
             
-            if (STB_Info_Test):
+            if (Ethernet_Test):
                 NOS_API.send_command_uma_uma("back,up,ok")
                 if not(NOS_API.grab_picture("WiFi_Menu")):
                     TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
@@ -1027,6 +1029,45 @@ def runTest():
                 WiFi_24G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_24G_ref"], 100, ["[AutoDiag_24G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                 
                 if WiFi_24G != 0 and WiFi_24G != -2:
+                    if not(NOS_API.grab_picture("WiFi_24G_Debug")):
+                        TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
+                        NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
+                                                + "; Error message: " + NOS_API.test_cases_results_info.reboot_error_message)
+                        NOS_API.set_error_message("Reboot")
+                        error_codes = NOS_API.test_cases_results_info.reboot_error_code
+                        error_messages = NOS_API.test_cases_results_info.reboot_error_message
+                        test_result = "FAIL"           
+                        
+                        NOS_API.add_test_case_result_to_file_report(
+                                        test_result,
+                                        "- - - - - - - - - - - - - - - - - - - -",
+                                        "- - - - - - - - - - - - - - - - - - - -",
+                                        error_codes,
+                                        error_messages)
+                        end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        report_file = ""    
+                        if (test_result != "PASS"):
+                            report_file = NOS_API.create_test_case_log_file(
+                                            NOS_API.test_cases_results_info.s_n_using_barcode,
+                                            NOS_API.test_cases_results_info.nos_sap_number,
+                                            NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                            NOS_API.test_cases_results_info.mac_using_barcode,
+                                            end_time)
+                            NOS_API.upload_file_report(report_file) 
+                            NOS_API.test_cases_results_info.isTestOK = False
+                            
+                            NOS_API.send_report_over_mqtt_test_plan(
+                                    test_result,
+                                    end_time,
+                                    error_codes,
+                                    report_file)
+                    
+                        ## Update test result
+                        TEST_CREATION_API.update_test_result(test_result)
+                    
+                        ## Return DUT to initial state and de-initialize grabber device
+                        NOS_API.deinitialize()
+                        return
                     NOS_API.send_command_uma_uma("ok")
                     WiFi_24G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_24G_ref"], 100, ["[AutoDiag_24G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                 
@@ -1090,6 +1131,45 @@ def runTest():
                     WiFi_5G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_5G_ref"], 100, ["[AutoDiag_5G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                     
                     if WiFi_5G != 0 and WiFi_5G != -2:
+                        if not(NOS_API.grab_picture("WiFi_5G_Debug")):
+                            TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
+                            NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
+                                                    + "; Error message: " + NOS_API.test_cases_results_info.reboot_error_message)
+                            NOS_API.set_error_message("Reboot")
+                            error_codes = NOS_API.test_cases_results_info.reboot_error_code
+                            error_messages = NOS_API.test_cases_results_info.reboot_error_message
+                            test_result = "FAIL"           
+                            
+                            NOS_API.add_test_case_result_to_file_report(
+                                            test_result,
+                                            "- - - - - - - - - - - - - - - - - - - -",
+                                            "- - - - - - - - - - - - - - - - - - - -",
+                                            error_codes,
+                                            error_messages)
+                            end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            report_file = ""    
+                            if (test_result != "PASS"):
+                                report_file = NOS_API.create_test_case_log_file(
+                                                NOS_API.test_cases_results_info.s_n_using_barcode,
+                                                NOS_API.test_cases_results_info.nos_sap_number,
+                                                NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                                NOS_API.test_cases_results_info.mac_using_barcode,
+                                                end_time)
+                                NOS_API.upload_file_report(report_file) 
+                                NOS_API.test_cases_results_info.isTestOK = False
+                                
+                                NOS_API.send_report_over_mqtt_test_plan(
+                                        test_result,
+                                        end_time,
+                                        error_codes,
+                                        report_file)
+                        
+                            ## Update test result
+                            TEST_CREATION_API.update_test_result(test_result)
+                        
+                            ## Return DUT to initial state and de-initialize grabber device
+                            NOS_API.deinitialize()
+                            return
                         NOS_API.send_command_uma_uma("ok")
                         WiFi_5G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_5G_ref"], 100, ["[AutoDiag_5G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                     
@@ -1148,7 +1228,7 @@ def runTest():
                         
                         WiFi_Test = True
                     else:
-                        if WiFi_24G == -2:
+                        if WiFi_5G == -2:
                             TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                             NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
                                                     + "; Error message: " + NOS_API.test_cases_results_info.reboot_error_message)
@@ -1907,6 +1987,37 @@ def runTest():
                         error_codes = NOS_API.test_cases_results_info.reboot_error_code
                         error_messages = NOS_API.test_cases_results_info.reboot_error_message
                         test_result = "FAIL"
+
+                        NOS_API.add_test_case_result_to_file_report(
+                                        test_result,
+                                        "- - - - - - - - - - - - - - - - - - - -",
+                                        "- - - - - - - - - - - - - - - - - - - -",
+                                        error_codes,
+                                        error_messages)
+                        end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        report_file = ""    
+                        if (test_result != "PASS"):
+                            report_file = NOS_API.create_test_case_log_file(
+                                            NOS_API.test_cases_results_info.s_n_using_barcode,
+                                            NOS_API.test_cases_results_info.nos_sap_number,
+                                            NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                            NOS_API.test_cases_results_info.mac_using_barcode,
+                                            end_time)
+                            NOS_API.upload_file_report(report_file) 
+                            NOS_API.test_cases_results_info.isTestOK = False
+                            
+                            NOS_API.send_report_over_mqtt_test_plan(
+                                    test_result,
+                                    end_time,
+                                    error_codes,
+                                    report_file)
+                    
+                        ## Update test result
+                        TEST_CREATION_API.update_test_result(test_result)
+                    
+                        ## Return DUT to initial state and de-initialize grabber device
+                        NOS_API.deinitialize()
+                        return
                     elif Bluetooth_Search == -1:
                         BluetoothTries = BluetoothTriesThreshold
                         TEST_CREATION_API.write_log_to_file("STB with image different of expected one.")
@@ -1916,7 +2027,38 @@ def runTest():
                         error_codes = NOS_API.test_cases_results_info.reboot_error_code
                         error_messages = NOS_API.test_cases_results_info.reboot_error_message
                         test_result = "FAIL"
+
+                        NOS_API.add_test_case_result_to_file_report(
+                                        test_result,
+                                        "- - - - - - - - - - - - - - - - - - - -",
+                                        "- - - - - - - - - - - - - - - - - - - -",
+                                        error_codes,
+                                        error_messages)
+                        end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        report_file = ""    
+                        if (test_result != "PASS"):
+                            report_file = NOS_API.create_test_case_log_file(
+                                            NOS_API.test_cases_results_info.s_n_using_barcode,
+                                            NOS_API.test_cases_results_info.nos_sap_number,
+                                            NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                            NOS_API.test_cases_results_info.mac_using_barcode,
+                                            end_time)
+                            NOS_API.upload_file_report(report_file) 
+                            NOS_API.test_cases_results_info.isTestOK = False
+                            
+                            NOS_API.send_report_over_mqtt_test_plan(
+                                    test_result,
+                                    end_time,
+                                    error_codes,
+                                    report_file)
                     
+                        ## Update test result
+                        TEST_CREATION_API.update_test_result(test_result)
+                    
+                        ## Return DUT to initial state and de-initialize grabber device
+                        NOS_API.deinitialize()
+                        return
+
                     BluetoothTries += 1
                    
                 if not(Bluetooth_Test):
@@ -2196,41 +2338,45 @@ def runTest():
                         return
                     
                     if not(analysed_video):
-                        TEST_CREATION_API.write_log_to_file("Could'n't Record Video")
-                        NOS_API.update_test_slot_comment("Error code: " + NOS_API.test_cases_results_info.grabber_error_code \
-                                                                            + "; Error message: " + NOS_API.test_cases_results_info.grabber_error_message)
-                        error_codes = NOS_API.test_cases_results_info.grabber_error_code
-                        error_messages = NOS_API.test_cases_results_info.grabber_error_message
-                        NOS_API.set_error_message("Inspection")
-                        
-                        NOS_API.add_test_case_result_to_file_report(
-                                        test_result,
-                                        "- - - - - - - - - - - - - - - - - - - -",
-                                        "- - - - - - - - - - - - - - - - - - - -",
-                                        error_codes,
-                                        error_messages)
-                        end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        report_file = NOS_API.create_test_case_log_file(
-                                        NOS_API.test_cases_results_info.s_n_using_barcode,
-                                        NOS_API.test_cases_results_info.nos_sap_number,
-                                        NOS_API.test_cases_results_info.cas_id_using_barcode,
-                                        NOS_API.test_cases_results_info.mac_using_barcode,
-                                        end_time)
-                        NOS_API.upload_file_report(report_file)
-                        NOS_API.test_cases_results_info.isTestOK = False
-                        
-                        NOS_API.send_report_over_mqtt_test_plan(
-                                test_result,
-                                end_time,
-                                error_codes,
-                                report_file)
-                
-                        ## Update test result
-                        TEST_CREATION_API.update_test_result(test_result)
+                        if attempt == 0:
+                            attempt += 1
+                            continue
+                        else:
+                            TEST_CREATION_API.write_log_to_file("Could'n't Record Video")
+                            NOS_API.update_test_slot_comment("Error code: " + NOS_API.test_cases_results_info.grabber_error_code \
+                                                                                + "; Error message: " + NOS_API.test_cases_results_info.grabber_error_message)
+                            error_codes = NOS_API.test_cases_results_info.grabber_error_code
+                            error_messages = NOS_API.test_cases_results_info.grabber_error_message
+                            NOS_API.set_error_message("Inspection")
+                            
+                            NOS_API.add_test_case_result_to_file_report(
+                                            test_result,
+                                            "- - - - - - - - - - - - - - - - - - - -",
+                                            "- - - - - - - - - - - - - - - - - - - -",
+                                            error_codes,
+                                            error_messages)
+                            end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            report_file = NOS_API.create_test_case_log_file(
+                                            NOS_API.test_cases_results_info.s_n_using_barcode,
+                                            NOS_API.test_cases_results_info.nos_sap_number,
+                                            NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                            NOS_API.test_cases_results_info.mac_using_barcode,
+                                            end_time)
+                            NOS_API.upload_file_report(report_file)
+                            NOS_API.test_cases_results_info.isTestOK = False
+                            
+                            NOS_API.send_report_over_mqtt_test_plan(
+                                    test_result,
+                                    end_time,
+                                    error_codes,
+                                    report_file)
                     
-                        ## Return DUT to initial state and de-initialize grabber device
-                        NOS_API.deinitialize()
-                        return            
+                            ## Update test result
+                            TEST_CREATION_API.update_test_result(test_result)
+                        
+                            ## Return DUT to initial state and de-initialize grabber device
+                            NOS_API.deinitialize()
+                            return            
                     
                     ## Check if video is playing (check if video is not freezed)
                     if (NOS_API.is_video_playing(TEST_CREATION_API.VideoInterface.HDMI1, NOS_API.ResolutionType.resolution_1080p, False)):     
@@ -3193,6 +3339,14 @@ def runTest():
                         TEST_CREATION_API.update_test_result(test_result)
                         
                         return
+                elif Factory_Reset_Result == -2:
+                    TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
+                    NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
+                                            + "; Error message: " + NOS_API.test_cases_results_info.reboot_error_message)
+                    NOS_API.set_error_message("Reboot")
+                    error_codes = NOS_API.test_cases_results_info.reboot_error_code
+                    error_messages = NOS_API.test_cases_results_info.reboot_error_message
+                    test_result = "FAIL"  
                 else:
                     TEST_CREATION_API.write_log_to_file("Factory Reset Fail")
                     NOS_API.update_test_slot_comment("Error code: " + NOS_API.test_cases_results_info.measure_boot_time_error_code \
@@ -3200,6 +3354,7 @@ def runTest():
                     NOS_API.set_error_message("Factory Reset")  
                     error_codes = NOS_API.test_cases_results_info.measure_boot_time_error_code
                     error_messages = NOS_API.test_cases_results_info.measure_boot_time_error_message
+                    test_result = "FAIL" 
                 
             System_Failure = 2
             Restest = 2
