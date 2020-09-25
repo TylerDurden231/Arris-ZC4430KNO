@@ -60,6 +60,9 @@ MAX_RECORD_VIDEO_TIME = 4000
 ## Lenght of Recorded Audio in ms
 MAX_RECORD_AUDIO_TIME = 2000
 
+NOS_API.grabber_type()
+TEST_CREATION_API.grabber_type()
+
 def runTest():
     System_Failure = 0
     Retest = 0
@@ -103,10 +106,11 @@ def runTest():
             counter = 0
             timeout = 0
             Upgrade_Tries = 0
-            Upgrade_Time = 50
+            Upgrade_Time = 80
             BluetoothTries = 0
             BluetoothTriesThreshold = 5
             Grabber_Init = 0
+            Paring = 0
             
             ### Initialize grabber device
             #NOS_API.initialize_grabber()
@@ -389,13 +393,118 @@ def runTest():
                     TEST_CREATION_API.grabber_start_audio_source(TEST_CREATION_API.AudioInterface.HDMI1)
                 
                 if (timeout >= WAIT_AUTODIAG_START):
-                    AutoDiag_start = NOS_API.wait_for_multiple_pictures(["Menu_ref"], WAIT_AUTODIAG_TEST, ["[Menu]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
+                    AutoDiag_start = NOS_API.wait_for_multiple_pictures(["Menu_ref", "Paring_Image_ref", "Menu_4K_ref", "Paring_Image_4K_ref", "Menu_4K_ref1", "Paring_Image_4K_ref1"], WAIT_AUTODIAG_TEST, ["[Menu]", "[Paring]", "[Menu_4K]", "[Paring_4k]", "[Menu_4K]", "[Paring_4k]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                     if (AutoDiag_start == -2):
                         NOS_API.display_custom_dialog("Confirme o cabo HDMI", 1, ["Continuar"], NOS_API.WAIT_TIME_TO_CLOSE_DIALOG)
-                        AutoDiag_start = NOS_API.wait_for_multiple_pictures(["Menu_ref"], 10, ["[Menu]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
+                        AutoDiag_start = NOS_API.wait_for_multiple_pictures(["Menu_ref", "Paring_Image_ref", "Menu_4K_ref", "Paring_Image_4K_ref", "Menu_4K_ref1", "Paring_Image_4K_ref1"], 10, ["[Menu]", "[Paring]", "[Menu_4K]", "[Paring_4k]", "[Menu_4K]", "[Paring_4k]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                         if (AutoDiag_start != -1 and AutoDiag_start != -2 ):
-                            counter = 4
-                            AutoDiag_Test = True
+                            if AutoDiag_start == 0 or AutoDiag_start == 2 or AutoDiag_start == 4:
+                                counter = 4
+                                AutoDiag_Test = True
+                            else:
+                                NOS_API.send_command_uma_uma("up")
+                                time.sleep(2)
+                                if not(NOS_API.grab_picture("Check_Paring")):
+                                    TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
+                                    NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
+                                                            + "; Error message: " + NOS_API.test_cases_results_info.reboot_error_message)
+                                    NOS_API.set_error_message("Reboot")
+                                    error_codes = NOS_API.test_cases_results_info.reboot_error_code
+                                    error_messages = NOS_API.test_cases_results_info.reboot_error_message
+                                    test_result = "FAIL"                           
+                                    
+                                    NOS_API.add_test_case_result_to_file_report(
+                                                    test_result,
+                                                    "- - - - - - - - - - - - - - - - - - - -",
+                                                    "- - - - - - - - - - - - - - - - - - - -",
+                                                    error_codes,
+                                                    error_messages)
+                                    end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                    report_file = ""    
+                                    if (test_result != "PASS"):
+                                        report_file = NOS_API.create_test_case_log_file(
+                                                        NOS_API.test_cases_results_info.s_n_using_barcode,
+                                                        NOS_API.test_cases_results_info.nos_sap_number,
+                                                        NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                                        NOS_API.test_cases_results_info.mac_using_barcode,
+                                                        end_time)
+                                        NOS_API.upload_file_report(report_file) 
+                                        NOS_API.test_cases_results_info.isTestOK = False
+                                        
+                                        NOS_API.send_report_over_mqtt_test_plan(
+                                                test_result,
+                                                end_time,
+                                                error_codes,
+                                                report_file)
+                                
+                                    ## Update test result
+                                    TEST_CREATION_API.update_test_result(test_result)
+                                
+                                    ## Return DUT to initial state and de-initialize grabber device
+                                    NOS_API.deinitialize()
+                                    return
+                                video_height = NOS_API.get_av_format_info(TEST_CREATION_API.AudioVideoInfoType.video_height)
+                                if video_height == "1080":
+                                    ref_pic = "Paring_Image_ref"
+                                    ref_pic_2 = "Paring_Image_ref"
+                                    pic_macro = "[Paring]"
+                                    ref_pic_1 = "Menu_ref"
+                                    ref_pic_3 = "Menu_ref"
+                                    pic_macro_1 = "[Menu]"
+                                elif video_height == "2160":
+                                    ref_pic = "Paring_Image_4K_ref"
+                                    ref_pic_2 = "Paring_Image_4K_ref1"
+                                    pic_macro = "[Paring_4k]"
+                                    ref_pic_1 = "Menu_4K_ref"
+                                    ref_pic_3 = "Menu_4K_ref1"
+                                    pic_macro_1 = "[Menu_4K]"
+                                if (TEST_CREATION_API.compare_pictures(ref_pic, "Check_Paring", pic_macro) or TEST_CREATION_API.compare_pictures(ref_pic_2, "Check_Paring", pic_macro)):
+                                    if USB_Test:
+                                        counter = 1
+                                        USB_Test = False
+                                        AutoDiag_Test = False
+                                        continue
+                                    else:
+                                        TEST_CREATION_API.write_log_to_file("STB didn't detect emulator(raspberry)")    
+                                        NOS_API.set_error_message("USB")
+                                        NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.usb_nok_error_code \
+                                                                                + "; Error message: " + NOS_API.test_cases_results_info.usb_nok_error_message) 
+                                        error_codes = NOS_API.test_cases_results_info.usb_nok_error_code
+                                        error_messages = NOS_API.test_cases_results_info.usb_nok_error_message                    
+                                        
+                                        NOS_API.add_test_case_result_to_file_report(
+                                                    test_result,
+                                                    "- - - - - - - - - - - - - - - - - - - -",
+                                                    "- - - - - - - - - - - - - - - - - - - -",
+                                                    error_codes,
+                                                    error_messages)
+                                        
+                                        end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                        report_file = ""    
+                                        
+                                        report_file = NOS_API.create_test_case_log_file(
+                                                        NOS_API.test_cases_results_info.s_n_using_barcode,
+                                                        NOS_API.test_cases_results_info.nos_sap_number,
+                                                        NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                                        NOS_API.test_cases_results_info.mac_using_barcode,
+                                                        end_time)
+                                        NOS_API.upload_file_report(report_file)
+                                        
+                                        NOS_API.send_report_over_mqtt_test_plan(
+                                                test_result,
+                                                end_time,
+                                                error_codes,
+                                                report_file)
+
+                                        ## Update test result
+                                        TEST_CREATION_API.update_test_result(test_result)
+
+                                        ## Return DUT to initial state and de-initialize grabber device
+                                        NOS_API.deinitialize()
+                                        return
+                                elif (TEST_CREATION_API.compare_pictures(ref_pic_1, "Check_Paring", pic_macro_1) or TEST_CREATION_API.compare_pictures(ref_pic_3, "Check_Paring", pic_macro_1)):
+                                    Paring = 1
+                                    AutoDiag_Test = True
                         elif (AutoDiag_start == -2):
                             if (NOS_API.display_custom_dialog("A STB est\xe1 ligada?", 2, ["OK", "NOK"], NOS_API.WAIT_TIME_TO_CLOSE_DIALOG) == "OK"):   
                                 TEST_CREATION_API.write_log_to_file("Image is not displayed on HDMI")
@@ -473,15 +582,181 @@ def runTest():
                                 return
 
                     elif (AutoDiag_start != -1 and AutoDiag_start != -2):
-                        AutoDiag_Test = True
+                        if AutoDiag_start == 0 or AutoDiag_start == 2 or AutoDiag_start == 4:
+                            AutoDiag_Test = True
+                        else:
+                            NOS_API.send_command_uma_uma("up")
+                            time.sleep(2)
+                            if not(NOS_API.grab_picture("Check_Paring")):
+                                TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
+                                NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
+                                                        + "; Error message: " + NOS_API.test_cases_results_info.reboot_error_message)
+                                NOS_API.set_error_message("Reboot")
+                                error_codes = NOS_API.test_cases_results_info.reboot_error_code
+                                error_messages = NOS_API.test_cases_results_info.reboot_error_message
+                                test_result = "FAIL"                           
+                                
+                                NOS_API.add_test_case_result_to_file_report(
+                                                test_result,
+                                                "- - - - - - - - - - - - - - - - - - - -",
+                                                "- - - - - - - - - - - - - - - - - - - -",
+                                                error_codes,
+                                                error_messages)
+                                end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                report_file = ""    
+                                if (test_result != "PASS"):
+                                    report_file = NOS_API.create_test_case_log_file(
+                                                    NOS_API.test_cases_results_info.s_n_using_barcode,
+                                                    NOS_API.test_cases_results_info.nos_sap_number,
+                                                    NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                                    NOS_API.test_cases_results_info.mac_using_barcode,
+                                                    end_time)
+                                    NOS_API.upload_file_report(report_file) 
+                                    NOS_API.test_cases_results_info.isTestOK = False
+                                    
+                                    NOS_API.send_report_over_mqtt_test_plan(
+                                            test_result,
+                                            end_time,
+                                            error_codes,
+                                            report_file)
+                            
+                                ## Update test result
+                                TEST_CREATION_API.update_test_result(test_result)
+                            
+                                ## Return DUT to initial state and de-initialize grabber device
+                                NOS_API.deinitialize()
+                                return
+                            video_height = NOS_API.get_av_format_info(TEST_CREATION_API.AudioVideoInfoType.video_height)
+                            if video_height == "1080":
+                                ref_pic = "Paring_Image_ref"
+                                ref_pic_2 = "Paring_Image_ref"
+                                pic_macro = "[Paring]"
+                                ref_pic_1 = "Menu_ref"
+                                ref_pic_3 = "Menu_ref"
+                                pic_macro_1 = "[Menu]"
+                            elif video_height == "2160":
+                                ref_pic = "Paring_Image_4K_ref"
+                                ref_pic_2 = "Paring_Image_4K_ref1"
+                                pic_macro = "[Paring_4k]"
+                                ref_pic_1 = "Menu_4K_ref"
+                                ref_pic_3 = "Menu_4K_ref1"
+                                pic_macro_1 = "[Menu_4K]"
+                            if (TEST_CREATION_API.compare_pictures(ref_pic, "Check_Paring", pic_macro) or TEST_CREATION_API.compare_pictures(ref_pic_2, "Check_Paring", pic_macro)):
+                                if USB_Test:
+                                    counter = 1
+                                    USB_Test = False
+                                    AutoDiag_Test = False
+                                    continue
+                                else:
+                                    TEST_CREATION_API.write_log_to_file("STB didn't detect emulator(raspberry)")    
+                                    NOS_API.set_error_message("USB")
+                                    NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.usb_nok_error_code \
+                                                                            + "; Error message: " + NOS_API.test_cases_results_info.usb_nok_error_message) 
+                                    error_codes = NOS_API.test_cases_results_info.usb_nok_error_code
+                                    error_messages = NOS_API.test_cases_results_info.usb_nok_error_message                    
+                                    
+                                    NOS_API.add_test_case_result_to_file_report(
+                                                test_result,
+                                                "- - - - - - - - - - - - - - - - - - - -",
+                                                "- - - - - - - - - - - - - - - - - - - -",
+                                                error_codes,
+                                                error_messages)
+                                    
+                                    end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                    report_file = ""    
+                                    
+                                    report_file = NOS_API.create_test_case_log_file(
+                                                    NOS_API.test_cases_results_info.s_n_using_barcode,
+                                                    NOS_API.test_cases_results_info.nos_sap_number,
+                                                    NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                                    NOS_API.test_cases_results_info.mac_using_barcode,
+                                                    end_time)
+                                    NOS_API.upload_file_report(report_file)
+                                    
+                                    NOS_API.send_report_over_mqtt_test_plan(
+                                            test_result,
+                                            end_time,
+                                            error_codes,
+                                            report_file)
+
+                                    ## Update test result
+                                    TEST_CREATION_API.update_test_result(test_result)
+
+                                    ## Return DUT to initial state and de-initialize grabber device
+                                    NOS_API.deinitialize()
+                                    return
+                            elif (TEST_CREATION_API.compare_pictures(ref_pic_1, "Check_Paring", pic_macro_1) or TEST_CREATION_API.compare_pictures(ref_pic_3, "Check_Paring", pic_macro_1)):
+                                Paring = 1
+                                AutoDiag_Test = True
                     
                     ###############################################################################################################################################
                     ################################################################## Upgrade_Test ###############################################################
                     ###############################################################################################################################################
                     
                     if(AutoDiag_Test):    
+                        video_height = NOS_API.get_av_format_info(TEST_CREATION_API.AudioVideoInfoType.video_height)
+                        if video_height == "2160":
+                            if Paring == 0:
+                                NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,down,down,ok")
+                            else:
+                                NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,down,down,down,ok")
+                            time.sleep(1)
+                            NOS_API.send_command_uma_uma("left")
+                            time.sleep(1)
+                            NOS_API.send_command_uma_uma("back")
+                            time.sleep(0.5)
+                            NOS_API.send_command_uma_uma("up,up,up,up,up,up,up,up,up,up,up,up")
+                            video_height = NOS_API.get_av_format_info(TEST_CREATION_API.AudioVideoInfoType.video_height)
+                            if video_height != "1080":
+                                if USB_Test:
+                                    counter = 1
+                                    USB_Test = False
+                                    AutoDiag_Test = False
+                                    continue
+                                else:
+                                    TEST_CREATION_API.write_log_to_file("STB didn't detect emulator(raspberry)")    
+                                    NOS_API.set_error_message("USB")
+                                    NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.usb_nok_error_code \
+                                                                            + "; Error message: " + NOS_API.test_cases_results_info.usb_nok_error_message) 
+                                    error_codes = NOS_API.test_cases_results_info.usb_nok_error_code
+                                    error_messages = NOS_API.test_cases_results_info.usb_nok_error_message                    
+                                    
+                                    NOS_API.add_test_case_result_to_file_report(
+                                                test_result,
+                                                "- - - - - - - - - - - - - - - - - - - -",
+                                                "- - - - - - - - - - - - - - - - - - - -",
+                                                error_codes,
+                                                error_messages)
+                                    
+                                    end_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                                    report_file = ""    
+                                    
+                                    report_file = NOS_API.create_test_case_log_file(
+                                                    NOS_API.test_cases_results_info.s_n_using_barcode,
+                                                    NOS_API.test_cases_results_info.nos_sap_number,
+                                                    NOS_API.test_cases_results_info.cas_id_using_barcode,
+                                                    NOS_API.test_cases_results_info.mac_using_barcode,
+                                                    end_time)
+                                    NOS_API.upload_file_report(report_file)
+                                    
+                                    NOS_API.send_report_over_mqtt_test_plan(
+                                            test_result,
+                                            end_time,
+                                            error_codes,
+                                            report_file)
+
+                                    ## Update test result
+                                    TEST_CREATION_API.update_test_result(test_result)
+
+                                    ## Return DUT to initial state and de-initialize grabber device
+                                    NOS_API.deinitialize()
+                                    return
+                                
                         ## Extracts STB Info and Checks STB Version and Upgrades if STB doesn't have current software
-                        NOS_API.send_command_uma_uma("down,down,ok")
+                        if Paring == 0:
+                            NOS_API.send_command_uma_uma("down,down,ok")
+                        else:
+                            NOS_API.send_command_uma_uma("down,down,down,ok")
                         
                         if not(NOS_API.grab_picture("ProductInformation")):
                             TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
@@ -522,11 +797,15 @@ def runTest():
                             ## Return DUT to initial state and de-initialize grabber device
                             NOS_API.deinitialize()
                             return
-                        if not(TEST_CREATION_API.compare_pictures("Product_Information_ref", "ProductInformation", "[Product_Information]")):
+                        if not(TEST_CREATION_API.compare_pictures("Product_Information_ref", "ProductInformation", "[Product_Information]", NOS_API.thres)):
                             #NOS_API.display_custom_dialog("Reinsira cabo USB e pressione Continuar", 1, ["Continuar"], NOS_API.WAIT_TIME_TO_CLOSE_DIALOG)
                             time.sleep(1)
-                            NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up")
-                            NOS_API.send_command_uma_uma("down,down,ok")
+                            if Paring == 0:
+                                NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up")
+                                NOS_API.send_command_uma_uma("down,down,ok")
+                            else:
+                                NOS_API.send_command_uma_uma("back,back,back,back,ok,up,up,up,up,up")
+                                NOS_API.send_command_uma_uma("down,down,down,ok")
                             if not(NOS_API.grab_picture("ProductInformationScnd")):
                                 TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                                 NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -566,7 +845,7 @@ def runTest():
                                 ## Return DUT to initial state and de-initialize grabber device
                                 NOS_API.deinitialize()
                                 return
-                            if not(TEST_CREATION_API.compare_pictures("Product_Information_ref", "ProductInformationScnd", "[Product_Information]")):
+                            if not(TEST_CREATION_API.compare_pictures("Product_Information_ref", "ProductInformationScnd", "[Product_Information]", NOS_API.thres)):
                                 if USB_Test:
                                     counter = 1
                                     USB_Test = False
@@ -661,9 +940,11 @@ def runTest():
                         Eth_MAC = NOS_API.fix_mac_stb_uma_uma(Eth_MAC)
                         WiFi_MAC = TEST_CREATION_API.OCR_recognize_text("ProductInformation", "[WiFi_MAC]", "[AUTODIAG_FILTER]", "WiFi_MAC")
                         WiFi_MAC = NOS_API.fix_mac_stb_uma_uma(WiFi_MAC)
+                        Bluetooth_MAC = TEST_CREATION_API.OCR_recognize_text("ProductInformation", "[Bluetooth_MAC]", "[AUTODIAG_FILTER]", "Bluetooth_MAC")
+                        Bluetooth_MAC = NOS_API.fix_mac_stb_uma_uma(Bluetooth_MAC)
                         WiFi_Firmware = TEST_CREATION_API.OCR_recognize_text("ProductInformation", "[WiFi_Firmware]", "[AUTODIAG_FILTER]", "WiFi_Firmware") 
                                                 
-                        if Software_Version == NOS_API.Firmware_Version_ZC4430KNO:
+                        if Software_Version == NOS_API.Firmware_Version_ZC4430KNO and AutoDiag_Version == NOS_API.AutoDiag_Version:
                             counter = 4
                             Upgrade_Test = True
                             if NOS_API.test_cases_results_info.DidUpgrade == 1:
@@ -684,7 +965,9 @@ def runTest():
                                 NOS_API.set_error_message("Não Actualiza") 
                                 error_codes =  NOS_API.test_cases_results_info.upgrade_nok_error_code
                                 error_messages = NOS_API.test_cases_results_info.upgrade_nok_error_message
-       
+
+                            TEST_CREATION_API.write_log_to_file("Software Version before Upgrade: " + str(Software_Version))
+                            TEST_CREATION_API.write_log_to_file("AutoDiag Version before Upgrade: " + str(AutoDiag_Version))
                             while Upgrade_Tries < 2:
                                 AutoDiag_Test = False
                                 NOS_API.configure_power_switch_by_inspection()
@@ -766,7 +1049,7 @@ def runTest():
                                     return
                                  
                                 ##Upgrade_Start = NOS_API.wait_for_multiple_pictures(["Upgrade_ref"], 55, ["[Upgrade_Logo]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
-                                Upgrade_Start = NOS_API.wait_for_multiple_pictures(["Upgrade_ref"], 120, ["[Upgrade_Logo]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
+                                Upgrade_Start = NOS_API.wait_for_multiple_pictures(["Upgrade_ref", "Upgrade_4K_ref", "Upgrade_4K_ref1"], 120, ["[Upgrade_Logo]", "[Upgrade_4K_Logo]", "[Upgrade_4K_Logo]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                                 
                                 if Upgrade_Start == -2 or Upgrade_Start == -1:
                                     Upgrade_Tries += 1
@@ -848,6 +1131,7 @@ def runTest():
                             TEST_CREATION_API.write_log_to_file("CAS ID: " + str(CAS_ID))
                             TEST_CREATION_API.write_log_to_file("Eth MAC: " + str(Eth_MAC))
                             TEST_CREATION_API.write_log_to_file("WiFi MAC: " + str(WiFi_MAC))
+                            TEST_CREATION_API.write_log_to_file("Bluetooth MAC: " + str(Bluetooth_MAC))
                             TEST_CREATION_API.write_log_to_file("Software Version: " + str(Software_Version))
                             TEST_CREATION_API.write_log_to_file("AutoDiag Version: " + str(AutoDiag_Version))
                             TEST_CREATION_API.write_log_to_file("WiFi Firmware: " + str(WiFi_Firmware)) 
@@ -903,7 +1187,7 @@ def runTest():
             ###############################################################################################################################################
             
             if (Ethernet_Test):
-                NOS_API.send_command_uma_uma("back,up,ok")
+                NOS_API.send_command_uma_uma("back,left,up,ok")
                 if not(NOS_API.grab_picture("WiFi_Menu")):
                     TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                     NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -943,9 +1227,9 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-                if not(TEST_CREATION_API.compare_pictures("WiFi_ref", "WiFi_Menu", "[WiFi_Menu]")):
-                    NOS_API.send_command_uma_uma("back,up,up,up")
-                    NOS_API.send_command_uma_uma("down,ok")
+                if not(TEST_CREATION_API.compare_pictures("WiFi_ref", "WiFi_Menu", "[WiFi_Menu]", NOS_API.thres)):
+                    NOS_API.send_command_uma_uma("back,left,up,up,up")
+                    NOS_API.send_command_uma_uma("down,down,ok")
                     if not(NOS_API.grab_picture("WiFi_MenuScn")):
                         TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -985,7 +1269,7 @@ def runTest():
                         ## Return DUT to initial state and de-initialize grabber device
                         NOS_API.deinitialize()
                         return
-                    if not(TEST_CREATION_API.compare_pictures("WiFi_ref", "WiFi_MenuScn", "[WiFi_Menu]")):
+                    if not(TEST_CREATION_API.compare_pictures("WiFi_ref", "WiFi_MenuScn", "[WiFi_Menu]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("Didn't Navigate to WiFi Menu")    
                         NOS_API.set_error_message("Navegação")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.navigation_error_code \
@@ -1026,7 +1310,7 @@ def runTest():
                 
                 NOS_API.send_command_uma_uma("ok")
                 
-                WiFi_24G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_24G_ref"], 100, ["[AutoDiag_24G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
+                WiFi_24G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_24G_ref", "WiFi_OK_24G_ref1"], 100, ["[AutoDiag_24G]", "[AutoDiag_24G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                 
                 if WiFi_24G != 0 and WiFi_24G != -2:
                     if not(NOS_API.grab_picture("WiFi_24G_Debug")):
@@ -1069,7 +1353,7 @@ def runTest():
                         NOS_API.deinitialize()
                         return
                     NOS_API.send_command_uma_uma("ok")
-                    WiFi_24G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_24G_ref"], 100, ["[AutoDiag_24G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
+                    WiFi_24G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_24G_ref", "WiFi_OK_24G_ref1"], 100, ["[AutoDiag_24G]", "[AutoDiag_24G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                 
                 if WiFi_24G == 0:
                     if not(NOS_API.grab_picture("WiFi_24G")):
@@ -1127,8 +1411,10 @@ def runTest():
                     NOS_API.send_command_uma_uma("right,ok")
                     time.sleep(1)
                     NOS_API.send_command_uma_uma("ok")
+                    # time.sleep(1)
+                    # NOS_API.send_command_uma_uma("ok")
                     
-                    WiFi_5G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_5G_ref"], 100, ["[AutoDiag_5G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
+                    WiFi_5G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_5G_ref", "WiFi_OK_5G_ref1"], 100, ["[AutoDiag_5G]", "[AutoDiag_5G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                     
                     if WiFi_5G != 0 and WiFi_5G != -2:
                         if not(NOS_API.grab_picture("WiFi_5G_Debug")):
@@ -1171,7 +1457,7 @@ def runTest():
                             NOS_API.deinitialize()
                             return
                         NOS_API.send_command_uma_uma("ok")
-                        WiFi_5G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_5G_ref"], 100, ["[AutoDiag_5G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
+                        WiFi_5G = NOS_API.wait_for_multiple_pictures(["WiFi_OK_5G_ref", "WiFi_OK_5G_ref1"], 100, ["[AutoDiag_5G]", "[AutoDiag_5G]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                     
                     if WiFi_5G == 0:
                         if not(NOS_API.grab_picture("WiFi_5G")):
@@ -1266,7 +1552,7 @@ def runTest():
             ################################################################## Front Panel Test ###########################################################
             ###############################################################################################################################################
             if(WiFi_Test):
-                NOS_API.send_command_uma_uma("back,down,down,ok,down,ok")
+                NOS_API.send_command_uma_uma("back,left,down,down,ok,down,ok")
                 if not(NOS_API.grab_picture("Front_Panel")):
                     TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                     NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -1306,9 +1592,9 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-                if not(TEST_CREATION_API.compare_pictures("Front_Panel_Menu_ref", "Front_Panel", "[Front_Panel]")):
-                    NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up")
-                    NOS_API.send_command_uma_uma("down,down,down,ok,down,ok")
+                if not(TEST_CREATION_API.compare_pictures("Front_Panel_Menu_ref", "Front_Panel", "[Front_Panel]", NOS_API.thres)):
+                    NOS_API.send_command_uma_uma("back,back,back,back,ok,up,up,up,up,up,up")
+                    NOS_API.send_command_uma_uma("down,down,down,down,ok,down,ok")
                     if not(NOS_API.grab_picture("Front_PanelScn")):
                         TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -1348,7 +1634,7 @@ def runTest():
                         ## Return DUT to initial state and de-initialize grabber device
                         NOS_API.deinitialize()
                         return
-                    if not(TEST_CREATION_API.compare_pictures("Front_Panel_Menu_ref", "Front_PanelScn", "[Front_Panel]")):
+                    if not(TEST_CREATION_API.compare_pictures("Front_Panel_Menu_ref", "Front_PanelScn", "[Front_Panel]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("Didn't Navigate to Front Panel Menu")    
                         NOS_API.set_error_message("Navegação")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.navigation_error_code \
@@ -1402,7 +1688,7 @@ def runTest():
             ################################################################## Equipment Test #############################################################
             ###############################################################################################################################################
             if(Front_Panel):
-                NOS_API.send_command_uma_uma("ok,back,back,down,ok")
+                NOS_API.send_command_uma_uma("ok,back,back,left,down,ok")
                 if not(NOS_API.grab_picture("Equipment")):
                     TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                     NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -1442,9 +1728,9 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-                if not(TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "Equipment", "[Equipment]")):
-                    NOS_API.send_command_uma_uma("back,back,back,back,back,ok,up,up,up,up")
-                    NOS_API.send_command_uma_uma("down,down,down,down,ok")
+                if not(TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "Equipment", "[Equipment]", NOS_API.thres)):
+                    NOS_API.send_command_uma_uma("back,back,back,back,back,back,ok,up,up,up,up,up,up")
+                    NOS_API.send_command_uma_uma("down,down,down,down,down,ok")
                     if not(NOS_API.grab_picture("EquipmentScn")):
                         TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -1484,7 +1770,7 @@ def runTest():
                         ## Return DUT to initial state and de-initialize grabber device
                         NOS_API.deinitialize()
                         return
-                    if not(TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "EquipmentScn", "[Equipment]")):
+                    if not(TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "EquipmentScn", "[Equipment]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("Didn't Navigate to Equipment Menu")    
                         NOS_API.set_error_message("Navegação")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.navigation_error_code \
@@ -1562,48 +1848,67 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-             
-                if (TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "Equipment", "[WiFi]")):
-                    if (TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "Equipment", "[Flash]")):
-                        CPU_Temperature = NOS_API.remove_whitespaces(TEST_CREATION_API.OCR_recognize_text("Equipment", "[Temperature]", "[AUTODIAG_FILTER]", "CPU_Temperature"))
-                        TEST_CREATION_API.write_log_to_file("Temperature_not_Fixed: " + str(CPU_Temperature))
-                        CPU_Temperature_Fixed = NOS_API.Fix_Temperature_UMA_UMA(CPU_Temperature)
-                        TEST_CREATION_API.write_log_to_file("Temperature_Fixed: " + str(CPU_Temperature_Fixed))
-                        if CPU_Temperature_Fixed < CPU_Temperature_Threshold:
-                            TEST_CREATION_API.write_log_to_file("########## Equipment Results ##########")
-                            TEST_CREATION_API.write_log_to_file("WiFi Test: OK")
-                            TEST_CREATION_API.write_log_to_file("Flash Test: OK")
-                            TEST_CREATION_API.write_log_to_file("CPU Temperature: " + str(CPU_Temperature))
-                            TEST_CREATION_API.write_log_to_file("\n")
-                            Equipment_Test = True
+                if (TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "Equipment", "[I2C]", NOS_API.thres)):
+                    if (TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "Equipment", "[Demodulator]", NOS_API.thres)):
+                        if (TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "Equipment", "[WiFi]", NOS_API.thres)):
+                            if (TEST_CREATION_API.compare_pictures("Equipment_Menu_ref", "Equipment", "[Flash]", NOS_API.thres)):
+                                CPU_Temperature = NOS_API.remove_whitespaces(TEST_CREATION_API.OCR_recognize_text("Equipment", "[Temperature]", "[AUTODIAG_FILTER]", "CPU_Temperature"))
+                                TEST_CREATION_API.write_log_to_file("Temperature_not_Fixed: " + str(CPU_Temperature))
+                                CPU_Temperature_Fixed = NOS_API.Fix_Temperature_UMA_UMA(CPU_Temperature)
+                                TEST_CREATION_API.write_log_to_file("Temperature_Fixed: " + str(CPU_Temperature_Fixed))
+                                if CPU_Temperature_Fixed < CPU_Temperature_Threshold:
+                                    TEST_CREATION_API.write_log_to_file("########## Equipment Results ##########")
+                                    TEST_CREATION_API.write_log_to_file("I2C Test: OK")
+                                    TEST_CREATION_API.write_log_to_file("Demodulator Test: OK")
+                                    TEST_CREATION_API.write_log_to_file("WiFi Test: OK")
+                                    TEST_CREATION_API.write_log_to_file("Flash Test: OK")
+                                    TEST_CREATION_API.write_log_to_file("CPU Temperature: " + str(CPU_Temperature))
+                                    TEST_CREATION_API.write_log_to_file("\n")
+                                    Equipment_Test = True
+                                else:
+                                    TEST_CREATION_API.write_log_to_file("CPU Temperature(" + str(CPU_Temperature_Fixed) + ") is bigger than Threshold(" + str(CPU_Temperature_Threshold) + ")")
+                                    NOS_API.update_test_slot_comment("Error code: " + NOS_API.test_cases_results_info.cpu_temp_nok_error_code \
+                                                                    + "; Error message: " + NOS_API.test_cases_results_info.cpu_temp_nok_error_message)
+                                    NOS_API.set_error_message("IC")
+                                    error_codes = NOS_API.test_cases_results_info.cpu_temp_nok_error_code
+                                    error_messages = NOS_API.test_cases_results_info.cpu_temp_nok_error_message
+                            else:
+                                TEST_CREATION_API.write_log_to_file("Flash Test Fails")
+                                NOS_API.update_test_slot_comment("Error code: " + NOS_API.test_cases_results_info.flash_nok_error_code \
+                                                                + "; Error message: " + NOS_API.test_cases_results_info.flash_nok_error_message)
+                                NOS_API.set_error_message("IC")
+                                error_codes = NOS_API.test_cases_results_info.flash_nok_error_code
+                                error_messages = NOS_API.test_cases_results_info.flash_nok_error_message
                         else:
-                            TEST_CREATION_API.write_log_to_file("CPU Temperature(" + str(CPU_Temperature_Fixed) + ") is bigger than Threshold(" + str(CPU_Temperature_Threshold) + ")")
-                            NOS_API.update_test_slot_comment("Error code: " + NOS_API.test_cases_results_info.cpu_temp_nok_error_code \
-                                                            + "; Error message: " + NOS_API.test_cases_results_info.cpu_temp_nok_error_message)
-                            NOS_API.set_error_message("IC")
-                            error_codes = NOS_API.test_cases_results_info.cpu_temp_nok_error_code
-                            error_messages = NOS_API.test_cases_results_info.cpu_temp_nok_error_message
+                            TEST_CREATION_API.write_log_to_file("STB didn't connect to AutoDiag_24G WiFi")
+                            NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.wifi_24g_error_code \
+                                                    + "; Error message: " + NOS_API.test_cases_results_info.wifi_24g_error_message)
+                            NOS_API.set_error_message("WiFi")
+                            error_codes = NOS_API.test_cases_results_info.wifi_24g_error_code
+                            error_messages = NOS_API.test_cases_results_info.wifi_24g_error_message
+                            test_result = "FAIL"
                     else:
-                        TEST_CREATION_API.write_log_to_file("Flash Test Fails")
-                        NOS_API.update_test_slot_comment("Error code: " + NOS_API.test_cases_results_info.flash_nok_error_code \
-                                                        + "; Error message: " + NOS_API.test_cases_results_info.flash_nok_error_message)
+                        TEST_CREATION_API.write_log_to_file("Demodulator Test Fail")
+                        NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.demodulator_fail_error_code \
+                                                + "; Error message: " + NOS_API.test_cases_results_info.demodulator_fail_error_message)
                         NOS_API.set_error_message("IC")
-                        error_codes = NOS_API.test_cases_results_info.flash_nok_error_code
-                        error_messages = NOS_API.test_cases_results_info.flash_nok_error_message
+                        error_codes = NOS_API.test_cases_results_info.demodulator_fail_error_code
+                        error_messages = NOS_API.test_cases_results_info.demodulator_fail_error_message
+                        test_result = "FAIL"
                 else:
-                    TEST_CREATION_API.write_log_to_file("STB didn't connect to AutoDiag_24G WiFi")
-                    NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.wifi_24g_error_code \
-                                            + "; Error message: " + NOS_API.test_cases_results_info.wifi_24g_error_message)
-                    NOS_API.set_error_message("WiFi")
-                    error_codes = NOS_API.test_cases_results_info.wifi_24g_error_code
-                    error_messages = NOS_API.test_cases_results_info.wifi_24g_error_message
+                    TEST_CREATION_API.write_log_to_file("I2C Test Fail")
+                    NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.i2c_fail_error_code \
+                                            + "; Error message: " + NOS_API.test_cases_results_info.i2c_fail_error_message)
+                    NOS_API.set_error_message("IC")
+                    error_codes = NOS_API.test_cases_results_info.i2c_fail_error_code
+                    error_messages = NOS_API.test_cases_results_info.i2c_fail_error_message
                     test_result = "FAIL"
             
             ###############################################################################################################################################
             ################################################################## Peripherals Test #############################################################
             ###############################################################################################################################################
             if(Equipment_Test):
-                NOS_API.send_command_uma_uma("back,down,ok")
+                NOS_API.send_command_uma_uma("back,left,down,ok")
                 if not(NOS_API.grab_picture("Peripherals")):
                     TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                     NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -1643,9 +1948,9 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-                if not(TEST_CREATION_API.compare_pictures("Peripherals_Menu_ref", "Peripherals", "[Peripherals]")):
-                    NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up,up,up")
-                    NOS_API.send_command_uma_uma("down,down,down,down,down,ok")
+                if not(TEST_CREATION_API.compare_pictures("Peripherals_Menu_ref", "Peripherals", "[Peripherals]", NOS_API.thres)):
+                    NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up,up,up,up,up")
+                    NOS_API.send_command_uma_uma("down,down,down,down,down,down,ok")
                     if not(NOS_API.grab_picture("PeripheralsScn")):
                         TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -1685,7 +1990,7 @@ def runTest():
                         ## Return DUT to initial state and de-initialize grabber device
                         NOS_API.deinitialize()
                         return
-                    if not(TEST_CREATION_API.compare_pictures("Peripherals_Menu_ref", "PeripheralsScn", "[Peripherals]")):
+                    if not(TEST_CREATION_API.compare_pictures("Peripherals_Menu_ref", "PeripheralsScn", "[Peripherals]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("Didn't Navigate to Peripherals Menu")    
                         NOS_API.set_error_message("Navegação")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.navigation_error_code \
@@ -1764,9 +2069,9 @@ def runTest():
                     NOS_API.deinitialize()
                     return
                 
-                if (TEST_CREATION_API.compare_pictures("Peripherals_Menu_ref", "Peripherals", "[USB]")):
+                if (TEST_CREATION_API.compare_pictures("Peripherals_Menu_ref", "Peripherals", "[USB]", NOS_API.thres)):
                     #if (TEST_CREATION_API.compare_pictures("Peripherals_Menu_ref", "Peripherals", "[Eth]")):
-                    if (TEST_CREATION_API.compare_pictures("Peripherals_Menu_ref", "Peripherals", "[HDMI]")):
+                    if (TEST_CREATION_API.compare_pictures("Peripherals_Menu_ref", "Peripherals", "[HDMI]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("########## Peripherals Results ##########")
                         TEST_CREATION_API.write_log_to_file("USB Test: OK")
                         TEST_CREATION_API.write_log_to_file("Ethernet Test: OK")
@@ -1794,7 +2099,7 @@ def runTest():
             ################################################################## Bluetooth Test #############################################################
             ###############################################################################################################################################
             if(Peripherals_Test):
-                NOS_API.send_command_uma_uma("back,down,down,down,down,down,down,ok")
+                NOS_API.send_command_uma_uma("back,left,down,down,down,down,down,down,ok")
                 if not(NOS_API.grab_picture("Bluetooth")):
                     TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                     NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -1834,9 +2139,9 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-                if not(TEST_CREATION_API.compare_pictures("Bluetooth_Menu_ref", "Bluetooth", "[Bluetooth]")):
-                    NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up")
-                    NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,down,down,down,down,ok")
+                if not(TEST_CREATION_API.compare_pictures("Bluetooth_Menu_ref", "Bluetooth", "[Bluetooth]", NOS_API.thres)):
+                    NOS_API.send_command_uma_uma("back,back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up,up")
+                    NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,down,down,down,down,down,ok")
                     if not(NOS_API.grab_picture("BluetoothScn")):
                         TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -1876,7 +2181,7 @@ def runTest():
                         ## Return DUT to initial state and de-initialize grabber device
                         NOS_API.deinitialize()
                         return
-                    if not(TEST_CREATION_API.compare_pictures("Bluetooth_Menu_ref", "BluetoothScn", "[Bluetooth]")):
+                    if not(TEST_CREATION_API.compare_pictures("Bluetooth_Menu_ref", "BluetoothScn", "[Bluetooth]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("Didn't Navigate to Bluetooth Menu")    
                         NOS_API.set_error_message("Navegação")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.navigation_error_code \
@@ -1918,7 +2223,7 @@ def runTest():
                 while BluetoothTries < BluetoothTriesThreshold:
                     NOS_API.send_command_uma_uma("ok")
                     
-                    Bluetooth_Search = NOS_API.wait_for_multiple_pictures(["Bluetooth_Menu_ref"], 25, ["[Idle_Bluetooth]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
+                    Bluetooth_Search = NOS_API.wait_for_multiple_pictures(["Bluetooth_Menu_ref", "Bluetooth_Menu_ref1"], 25, ["[Idle_Bluetooth]", "[Idle_Bluetooth]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                     
                     if Bluetooth_Search != -1 and Bluetooth_Search != -2:
                         if not(NOS_API.grab_picture("Bluetooth_" + str(BluetoothTries))):
@@ -2077,7 +2382,7 @@ def runTest():
                 ## Initialize PQM Test variable as True
                 pqm_analyse_check = True   
                 
-                NOS_API.send_command_uma_uma("back,up,up,up,up,ok")
+                NOS_API.send_command_uma_uma("back,left,up,up,up,up,ok")
                 if not(NOS_API.grab_picture("Sintonization")):
                     TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                     NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -2117,9 +2422,9 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-                if not(TEST_CREATION_API.compare_pictures("Sintonization_Menu_ref", "Sintonization", "[Sintonization]")):
-                    NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up")
-                    NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,ok")
+                if not(TEST_CREATION_API.compare_pictures("Sintonization_Menu_ref", "Sintonization", "[Sintonization]", NOS_API.thres)):
+                    NOS_API.send_command_uma_uma("back,back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up,up")
+                    NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,down,ok")
                     if not(NOS_API.grab_picture("SintonizationScn")):
                         TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -2159,7 +2464,7 @@ def runTest():
                         ## Return DUT to initial state and de-initialize grabber device
                         NOS_API.deinitialize()
                         return
-                    if not(TEST_CREATION_API.compare_pictures("Sintonization_Menu_ref", "SintonizationScn", "[Sintonization]")):
+                    if not(TEST_CREATION_API.compare_pictures("Sintonization_Menu_ref", "SintonizationScn", "[Sintonization]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("Didn't Navigate to Product Information Menu")    
                         NOS_API.set_error_message("Navegação")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.navigation_error_code \
@@ -2422,6 +2727,8 @@ def runTest():
                         
                         Video_Result = NOS_API.compare_pictures("HDMI_HD_Video_1080_ref", "HD_Video_Channel", "[HALF_SCREEN_HD]") 
                         Video_Result_1 = NOS_API.compare_pictures("HDMI_HD_Video_1080_Voltar_ref", "HD_Video_Channel", "[HALF_SCREEN_HD]")
+                        Video_Result_2 = NOS_API.compare_pictures("HDMI_HD_Video_1080_Voltar_4K_ref", "HD_Video_Channel", "[HALF_SCREEN_HD]")
+                        Video_Result_3 = NOS_API.compare_pictures("HDMI_HD_Video_1080_Voltar_4K_ref1", "HD_Video_Channel", "[HALF_SCREEN_HD]")
                         ## Record Audio from HDMI
                         TEST_CREATION_API.record_audio("HD_Audio_Channel", MAX_RECORD_AUDIO_TIME)
 
@@ -2577,12 +2884,12 @@ def runTest():
                                 TEST_CREATION_API.record_audio("HD_Audio_Channel_2", MAX_RECORD_AUDIO_TIME)
                                 Audio_Result = NOS_API.compare_audio("No_Both_ref", "HD_Audio_Channel_2")
                             
-                        if ((Video_Result >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_1 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD) and Audio_Result < TEST_CREATION_API.AUDIO_THRESHOLD):
+                        if ((Video_Result >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_1 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_2 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_3 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD) and Audio_Result < TEST_CREATION_API.AUDIO_THRESHOLD):
                             attempt = 2
                             HDMI_HD_1080_Test = True
-                            NOS_API.send_command_uma_uma("back,back")                       
+                            NOS_API.send_command_uma_uma("back,back,left")                       
                         else: 
-                            if (Video_Result >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD and Video_Result_1 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD ):
+                            if (Video_Result >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_1 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_2 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD):
                                 attempt = 2
                                 TEST_CREATION_API.write_log_to_file("Audio Absence on HDMI 1080p")
                                 NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.hdmi_1080p_signal_absence_error_code \
@@ -2663,9 +2970,9 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-                if not(TEST_CREATION_API.compare_pictures("HDMI_Menu_ref", "HDMI_Menu", "[HDMI]")):
-                    NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up")
-                    NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,down,down,ok")
+                if not(TEST_CREATION_API.compare_pictures("HDMI_Menu_ref", "HDMI_Menu", "[HDMI]", NOS_API.thres)):
+                    NOS_API.send_command_uma_uma("back,back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up,up")
+                    NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,down,down,down,ok")
                     if not(NOS_API.grab_picture("HDMI_MenuScn")):
                         TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -2705,7 +3012,7 @@ def runTest():
                         ## Return DUT to initial state and de-initialize grabber device
                         NOS_API.deinitialize()
                         return
-                    if not(TEST_CREATION_API.compare_pictures("HDMI_Menu_ref", "HDMI_MenuScn", "[HDMI]")):
+                    if not(TEST_CREATION_API.compare_pictures("HDMI_Menu_ref", "HDMI_MenuScn", "[HDMI]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("Didn't Navigate to Product Information Menu")    
                         NOS_API.set_error_message("Navegação")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.navigation_error_code \
@@ -2749,6 +3056,7 @@ def runTest():
                 NOS_API.send_command_uma_uma("left") 
                 time.sleep(2)
                 NOS_API.send_command_uma_uma("back") 
+                NOS_API.send_command_uma_uma("left") 
                 
                 video_height = NOS_API.get_av_format_info(TEST_CREATION_API.AudioVideoInfoType.video_height)
                 if (video_height != "720"):
@@ -2828,9 +3136,9 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-                if not(TEST_CREATION_API.compare_pictures("Sintonization_Menu_720_ref", "Sintonization_720", "[Sintonization_720]")):
-                    NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up")
-                    NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,ok")
+                if not(TEST_CREATION_API.compare_pictures("Sintonization_Menu_720_ref", "Sintonization_720", "[Sintonization_720]", NOS_API.thres)):
+                    NOS_API.send_command_uma_uma("back,back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up")
+                    NOS_API.send_command_uma_uma("down,down,down,down,down,down,down,down,ok")
                     if not(NOS_API.grab_picture("Sintonization_720Scn")):
                         TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -2870,7 +3178,7 @@ def runTest():
                         ## Return DUT to initial state and de-initialize grabber device
                         NOS_API.deinitialize()
                         return
-                    if not(TEST_CREATION_API.compare_pictures("Sintonization_Menu_720_ref", "Sintonization_720Scn", "[Sintonization_720]")):
+                    if not(TEST_CREATION_API.compare_pictures("Sintonization_Menu_720_ref", "Sintonization_720Scn", "[Sintonization_720]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("Didn't Navigate to Product Information Menu")    
                         NOS_API.set_error_message("Navegação")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.navigation_error_code \
@@ -2880,8 +3188,8 @@ def runTest():
                         
                         NOS_API.add_test_case_result_to_file_report(
                                     test_result,
-                                    "- - - - " + str(tx_value) + " " + str(rx_value) + " " + str(downloadstream_snr_value) + " - - - - - " + str(cas_id_number) + " " + str(sw_version) + " - " + str(sc_number) + " - - - -",
-                                    "- - - - <52 >-10<10 >=34 - - - - - - - - - - - - -",
+                                    "- - - - - - - - - - - - - - - - - - - -",
+                                    "- - - - - - - - - - - - - - - - - - - -",
                                     error_codes,
                                     error_messages)
                         
@@ -3120,6 +3428,8 @@ def runTest():
                     
                     Video_Result = NOS_API.compare_pictures("HDMI_SD_Video_720_ref", "SD_Video_Channel", "[HALF_SCREEN_SD]")
                     Video_Result_1 = NOS_API.compare_pictures("HDMI_SD_Video_720_Voltar_ref", "SD_Video_Channel", "[HALF_SCREEN_SD]")
+                    Video_Result_2 = NOS_API.compare_pictures("HDMI_SD_Video_720_Voltar_4K_ref", "SD_Video_Channel", "[HALF_SCREEN_SD]")
+                    Video_Result_3 = NOS_API.compare_pictures("HDMI_SD_Video_720_Voltar_4K_ref1", "SD_Video_Channel", "[HALF_SCREEN_SD]")
                     
                     ## Record audio from digital output (HDMI)
                     TEST_CREATION_API.record_audio("SD_Audio_Channel", MAX_RECORD_AUDIO_TIME)
@@ -3132,11 +3442,11 @@ def runTest():
                         TEST_CREATION_API.record_audio("SD_Audio_Channel_1", MAX_RECORD_AUDIO_TIME)
                         Audio_Result = NOS_API.compare_audio("No_Both_ref", "SD_Audio_Channel_1")
             
-                    if ((Video_Result >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_1 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD) and Audio_Result < TEST_CREATION_API.AUDIO_THRESHOLD):
+                    if ((Video_Result >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_1 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_2 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_3 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD) and Audio_Result < TEST_CREATION_API.AUDIO_THRESHOLD):
                         HDMI_SD_720_Test = True
-                        NOS_API.send_command_uma_uma("back,back") 
+                        NOS_API.send_command_uma_uma("back,back,left") 
                     else:
-                        if (Video_Result >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD and Video_Result_1 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD):
+                        if (Video_Result >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_1 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_2 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD or Video_Result_3 >= TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD):
                             TEST_CREATION_API.write_log_to_file("Audio Absence on HDMI 720p")
                             NOS_API.update_test_slot_comment("Error code: " + NOS_API.test_cases_results_info.hdmi_720p_signal_absence_error_code \
                                                                 + "; Error message: " + NOS_API.test_cases_results_info.hdmi_720p_signal_absence_error_message)
@@ -3175,7 +3485,7 @@ def runTest():
             ################################################################ Factory Reset Test ###########################################################
             ###############################################################################################################################################
             if (HDMI_4k_2160_Test):
-                NOS_API.send_command_uma_uma("up,up,up,up,up,up,up,up,ok")
+                NOS_API.send_command_uma_uma("up,up,up,up,up,up,up,up,down,ok")
                 if not(NOS_API.grab_picture("Factory_Reset")):
                     TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                     NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -3215,8 +3525,8 @@ def runTest():
                     ## Return DUT to initial state and de-initialize grabber device
                     NOS_API.deinitialize()
                     return
-                if not(TEST_CREATION_API.compare_pictures("Factory_Reset_Menu_ref", "Factory_Reset", "[FactoryReset]")):
-                    NOS_API.send_command_uma_uma("back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up,ok")
+                if not(TEST_CREATION_API.compare_pictures("Factory_Reset_Menu_ref", "Factory_Reset", "[FactoryReset]", NOS_API.thres)):
+                    NOS_API.send_command_uma_uma("back,back,back,back,ok,up,up,up,up,up,up,up,up,up,up,up,up,down,ok")
                     if not(NOS_API.grab_picture("Factory_ResetScn")):
                         TEST_CREATION_API.write_log_to_file("STB lost Signal.Possible Reboot.")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.reboot_error_code \
@@ -3256,7 +3566,7 @@ def runTest():
                         ## Return DUT to initial state and de-initialize grabber device
                         NOS_API.deinitialize()
                         return
-                    if not(TEST_CREATION_API.compare_pictures("Factory_Reset_Menu_ref", "Factory_ResetScn", "[FactoryReset]")):
+                    if not(TEST_CREATION_API.compare_pictures("Factory_Reset_Menu_ref", "Factory_ResetScn", "[FactoryReset]", NOS_API.thres)):
                         TEST_CREATION_API.write_log_to_file("Didn't Navigate to Product Information Menu")    
                         NOS_API.set_error_message("Navegação")
                         NOS_API.update_test_slot_comment("Error code = " + NOS_API.test_cases_results_info.navigation_error_code \
@@ -3296,8 +3606,8 @@ def runTest():
                         return
                 
                 NOS_API.send_command_uma_uma("ok")
-                
-                Factory_Reset_Result = NOS_API.wait_for_multiple_pictures(["Factory_Reset_Result_ref"], 10, ["[FactoryReset_Result]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
+
+                Factory_Reset_Result = NOS_API.wait_for_multiple_pictures(["Factory_Reset_Result_ref", "Factory_Reset_Result_4K_ref", "Factory_Reset_Result_4K_ref1"], 10, ["[FactoryReset_Result]", "[FactoryReset_Result]", "[FactoryReset_Result]"], [TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD, TEST_CREATION_API.DEFAULT_HDMI_VIDEO_THRESHOLD])
                 
                 if Factory_Reset_Result != -1 and Factory_Reset_Result != -2:
                     test_result = "PASS"
